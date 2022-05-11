@@ -6,8 +6,14 @@ namespace StarterGame
 {
     public class Player
     {
-        private Dictionary<string, IItem> _items;
-        private float _totalWeight;
+        Random rand = new Random();
+        private int _health = 25;
+        private int _strength = 3;
+        private ItemContainer _items;
+        private float _weightAllowed;
+        public float WeightAllowed { get { return _weightAllowed; } set { _weightAllowed = value; } }
+        private int _volumeAllowed;
+        public int VolumeAllowed { get { return _volumeAllowed; } set { _volumeAllowed = value; } }
         private Stack<Room> visitedRooms = new Stack<Room>();
         private Room _currentRoom = null;
         public Room CurrentRoom
@@ -25,10 +31,9 @@ namespace StarterGame
         public Player(Room room)
         {
             _currentRoom = room;
-            _items = new Dictionary<string, IItem>();
-            _totalWeight = 20;
-            //NotificationCenter.Instance.AddObserver("PlayerPickedUpItem", PlayerPickedUpItem);
-            //NotificationCenter.Instance.AddObserver("PlayerPlacedItem", PlayerPlacedItem);
+            _items = new ItemContainer();
+            _weightAllowed = 20;
+            _volumeAllowed = 5;
         }
 
         public void WaltTo(string direction)
@@ -86,28 +91,39 @@ namespace StarterGame
         {
             this.OutputMessage("\n" + this.CurrentRoom.Description());
             this.OutputMessage("\n" + this.CurrentRoom.GetItems());
+            this.OutputMessage("\n" + this.CurrentRoom.GetBeasts());
         }
 
         //checks if item is in room, then checks if item is in inventory
-        //prints item's description (name and weight)
-        public void Look(string itemName)
+        //prints item's description (name and weight) 
+        public void Look(string name)
         {
-            IItem gotRoomItem = this.CurrentRoom.GetItem(itemName);
-            _items.TryGetValue(itemName, out IItem gotInvItem);
-            if (gotRoomItem != null) //If item in current room, output description
+            if(this.CurrentRoom.GetItem(name)!= null || _items.GetItem(name)!=null)
             {
-                this.OutputMessage(gotRoomItem.Description);
+                IItem gotRoomItem = this.CurrentRoom.GetItem(name);
+                IItem gotInvItem = _items.GetItem(name);
+                if (gotRoomItem != null) //If item in current room, output description
+                {
+                    this.OutputMessage(gotRoomItem.Description);
+                }
+                else if (gotInvItem != null) //if item in inventory, output descrtiption 
+                {
+                    this.OutputMessage(gotInvItem.Description);
+                }
+                else
+                {
+                    ErrorMessage("The item " + name + " is not here...");
+                }
             }
-            else if (gotInvItem != null) //if item in inventory, output descrtiption 
+            else if (this.CurrentRoom.GetBeast(name) != null)
             {
-                this.OutputMessage(gotInvItem.Description);
+                this.WarningMessage(this.CurrentRoom.GetBeast(name).Description);
+                this.WarningMessage("Items: "+ this.CurrentRoom.GetBeast(name).GetBeastItem());
             }
-            else
-            {
-                ErrorMessage("The item: " + itemName + " is not here...");
-            }
+            
         }
 
+        //yucky code but item is checked if its in the room, then if its pickupable, then if theres room in the inventory
         public void Pickup(string itemName)
         {
             if(this.CurrentRoom.GetItem(itemName) != null)
@@ -115,14 +131,23 @@ namespace StarterGame
                 IItem gotItem = this.CurrentRoom.GetItem(itemName);
                 if (gotItem.Pickupable)
                 {
-                    if((_totalWeight-gotItem.Weight) > 0)
+                    if((((_items.TotalWeight()+gotItem.Weight)  < _weightAllowed)&&_items.TotalVolume()<_volumeAllowed)&&(gotItem.Name != "backpack"))
                     {
-                        _items.Add(itemName, gotItem);
-                        _totalWeight = _totalWeight - gotItem.Weight;
+                        _items.Add(gotItem);
                         this.InformationMessage("Picked up " + itemName + "!");
-                        //Notification notification = new Notification("PlayerPickedupItem", this);
-                        //NotificationCenter.Instance.PostNotification(notification);
-                        this.CurrentRoom.Remove(itemName);
+                        this.CurrentRoom.Remove(gotItem);
+                        if(itemName == "dagger")
+                        {
+                            _strength = _strength + gotItem.Value;
+                        }
+                    }
+                    else if (gotItem.Name == "backpack") 
+                    {
+                        _items.Add(gotItem);
+                        this.WeightAllowed = 50;
+                        this.VolumeAllowed = 15;
+                        this.CurrentRoom.Remove(gotItem);
+                        this.InformationMessage("Picked up a special item! Now you can carry up to 50 weight!");
                     }
                     else
                     {
@@ -141,53 +166,73 @@ namespace StarterGame
             
         }
 
-        /* not necessary?
-        public void PlayerPickedUpItem(Notification notification)
-        {
-            Player player = (Player)notification.Object;
-            player.InformationMessage("Picked it up!");
-        }
-        */
-
         //if item is in inventory, place item in room then remove item from inventory (aka items dictionary)
-        public void Place(string itemName)
+        public bool Place(string itemName)
         {
-            if(_items.ContainsKey(itemName))
+            IItem gotItem = _items.GetItem(itemName);
+            if (gotItem!=null)
             {
-                this.CurrentRoom.Drop(_items[itemName]);
-                _items.Remove(itemName);
+                this.CurrentRoom.Drop(gotItem);
+                _items.Remove(gotItem);
                 this.InformationMessage("Placed "+itemName+ "!");
-                //Notification notification = new Notification("PlayerPlacedItem", this);
-                //NotificationCenter.Instance.PostNotification(notification);
+                Dictionary<string, Object> userInfo = new Dictionary<string, object>();
+                userInfo["item"] = gotItem;
+                Notification notification = new Notification("PlayerDroppedItem", this, userInfo);
+                NotificationCenter.Instance.PostNotification(notification);
+
+
+                Notification notification1 = new Notification("PlayerDroppedItemWin", this);
+                NotificationCenter.Instance.PostNotification(notification1);
+                return true;
             }
             else
             {
                 ErrorMessage("You do not have that item.");
             }
+            return false;
         }
-
-        /* not necessary?
-        public void PlayerPlacedItem(Notification notification)
-        {
-            Player player = (Player)notification.Object;
-            player.InformationMessage("Placed it!");
-        }
-        */
 
         //prints out the items the player has picked up
         public void Inventory()
         {
-            string itemNames = "***Your Inventory\n **-------------**\n";
-            float weights = 0;
-            Dictionary<string, IItem>.KeyCollection keys = _items.Keys;
-            foreach (string itemName in keys)
+            this.OutputMessage("   Your Inventory\n **-------------**");
+            this.OutputMessage(_items.ListItems());
+            this.OutputMessage("\nTotal weight: " + _items.TotalWeight());
+        }
+
+        public void Fight(string name)
+        {
+            Beast gotBeast = this.CurrentRoom.GetBeast(name);
+            if (gotBeast != null)
             {
-                itemNames += " " + itemName+"\n";
-                weights = weights + _items[itemName].Weight;
+                while(_health > 0 && gotBeast.Health > 0)
+                {
+                    int roundStr = rand.Next(1, _strength);
+                    this.OutputMessage("You have " + _health + " health");
+                    this.OutputMessage("The " + name + " has " + gotBeast.Health + " health");
+                    gotBeast.LoseHealth(roundStr);
+                    this.InformationMessage("You attacked with "+ roundStr+ " damage");
+                    this.ErrorMessage(name + " attacked with " + gotBeast.Strength+" damage");
+                    _health = _health - gotBeast.Attack();
+                    //pause fight for 1 seconds
+                    System.Threading.Thread.Sleep(1000);
+                }
+                if(_health <= 0)
+                {
+                    ErrorMessage("you have no..health");
+                    
+                }
+                else if(gotBeast.Health <= 0)
+                {
+                    gotBeast.Die();
+                    InformationMessage("You defeated the " + gotBeast.Name+"\n\n Did it drop any items?");
+
+                }
             }
-            
-            this.OutputMessage(itemNames);
-            this.OutputMessage("Total weight: " + weights);
+            else
+            {
+                this.WarningMessage("There is no " + name + " here.");
+            }
         }
 
         public void OutputMessage(string message)
@@ -214,6 +259,11 @@ namespace StarterGame
         public void ErrorMessage(string message)
         {
             ColoredMessage(message, ConsoleColor.Red);
+        }
+
+        public void WinMessage(string message)
+        {
+            ColoredMessage(message, ConsoleColor.Green);
         }
     }
 

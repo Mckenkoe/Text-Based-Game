@@ -4,6 +4,7 @@ using System;
 
 namespace StarterGame
 {
+    //delegate pattern
     public interface IRoomDelegate
     {
         Dictionary<string, Room> ContainingRoomExits { set; }
@@ -16,14 +17,27 @@ namespace StarterGame
     public class TrapRoom :IRoomDelegate
     {
         private string unlockedWord;
-        public Room ContainingRoom { get; set; }  //Not workiong?
+        public Room ContainingRoom { get; set; } 
         public Dictionary<string, Room> ContainingRoomExits { set; get; }
         private Dictionary<string, Room> _containingRoomExits { set { _containingRoomExits = value; } }
+        private Dictionary<string, IItem> _unlockedItems;
+        private ItemContainer _items;
+        private Dictionary<string, IItem> _unlockItems;
+        private string _unlockedWord;
         public TrapRoom(): this("test") { }
         //Designated constructor
-        public TrapRoom(string theWord)
+        public TrapRoom(string word)
         {
-            unlockedWord = theWord;
+            _unlockedItems = new Dictionary<string, IItem>();
+            Item egg = new Item("egg", 5);
+            _unlockedItems.Add("egg",egg);
+            Item backpack = new Item("backpack", 0, 35);
+            _unlockedItems.Add("backpack", backpack);
+
+            _unlockedWord = word;
+            _items = new ItemContainer();
+
+            NotificationCenter.Instance.AddObserver("PlayerDroppedItem", PlayerDroppedItem);
             NotificationCenter.Instance.AddObserver("PlayerSaidAWord", PlayerSaidAWord);
         }
         public Room GetExit(string exitName)
@@ -36,7 +50,23 @@ namespace StarterGame
         }
         public string Description()
         {
-            return "you are in a trap room." + "\n" + GetExits();
+            return "you are stuck now. Place egg to get special item and get out, or say open to just get out." + "\n" + GetExits();
+        }
+
+        public void PlayerDroppedItem(Notification notification)
+        {
+            Player player = (Player)notification.Object;
+            if (player.CurrentRoom == ContainingRoom)
+            {
+                Dictionary<string, Object> userInfo = notification.UserInfo;
+                IItem item = (IItem)userInfo["item"];
+                if (_unlockedItems.ContainsKey(item.Name))
+                {
+                    ContainingRoom.Delegate = null;
+                    player.OutputMessage("You are free!");
+                    ContainingRoom.Drop(_unlockedItems["backpack"]); 
+                }
+            }
         }
         public void PlayerSaidAWord(Notification notification)
         {
@@ -45,7 +75,7 @@ namespace StarterGame
             {
                 Dictionary<string, Object> userInfo = notification.UserInfo;
                 string word = (string)userInfo["word"];
-                if(word == unlockedWord)
+                if (word == _unlockedWord)
                 {
                     ContainingRoom.Delegate = null;
                     player.OutputMessage("You are free!");
@@ -54,19 +84,22 @@ namespace StarterGame
                 {
                     player.OutputMessage("You said the wrong word.");
                 }
-            }        
+            }
         }
     }
 
-    public class EchoRoom: IRoomDelegate
+    public class WinRoom:IRoomDelegate
     {
-        public EchoRoom()
-        {
-            NotificationCenter.Instance.AddObserver("PlayerSaidAWord", PlayerSaidAWord);
-        }
-        public Room ContainingRoom { get; set; }
-        public Dictionary<string, Room> ContainingRoomExits { set; get; }
         private Dictionary<string, Room> _containingRoomExits { set { _containingRoomExits = value; } }
+        public Dictionary<string, Room> ContainingRoomExits { set; get; }
+        private ItemContainer _items;
+        public Room ContainingRoom { get; set; }
+        public WinRoom()
+        {
+            _items = new ItemContainer();
+
+            NotificationCenter.Instance.AddObserver("PlayerDroppedItemWin", PlayerDroppedItemWin);
+        }
         public Room GetExit(string exitName)
         {
             Room room = null;
@@ -83,26 +116,33 @@ namespace StarterGame
             }
             return exitNames;
         }
-        public string Description()
-        {
-            return "\nThis is an echo room\n"+ ContainingRoom.Tag+ ". \nYou are " + ContainingRoom.Tag + ".\n *** " + this.GetExits(); ;        }
-        public void PlayerSaidAWord(Notification notification)
+        public void PlayerDroppedItemWin(Notification notification)
         {
             Player player = (Player)notification.Object;
-            if(ContainingRoom == player.CurrentRoom)
+            if (player.CurrentRoom == ContainingRoom)
             {
-                Dictionary<string, object> userInfo = notification.UserInfo;
-                string word = (string)userInfo["word"];
-                player.OutputMessage("\n" + word + "..." + word + "..." + word + "\n");
+                IItem milk = ContainingRoom.GetItem("milk");
+                IItem egg = ContainingRoom.GetItem("egg");
+                IItem sugar= ContainingRoom.GetItem("sugar");
+                IItem flour = ContainingRoom.GetItem("flour");
+                IItem chocolate = ContainingRoom.GetItem("chocolate");
+                if (milk != null && egg != null && sugar != null && flour != null && chocolate != null)
+                {
+                    player.WinMessage("\n\n-------\n\nYOU WON!!\n\n-------\n\n");
+                }
             }
-           
+        }
+        public string Description()
+        {
+            return "Place all required ingredients to escape the castle!\nIngredients:\n- Milk\n- Flour\n- Sugar\n- egg\n- chocolate";
         }
     }
 
     public class Room
     {
         private Dictionary<string, Room> _exits;
-        private Dictionary<string, IItem> _items;
+        private ItemContainer _items;
+        private BeastContainer _beasts;
         private string _tag;
         public string Tag
         {
@@ -141,7 +181,8 @@ namespace StarterGame
         public Room(string tag)
         {
             _exits = new Dictionary<string, Room>();
-            _items = new Dictionary<string, IItem>();
+            _items = new ItemContainer();
+            _beasts = new BeastContainer();
             this.Tag = tag;
             
         }
@@ -190,42 +231,44 @@ namespace StarterGame
         //add item to items in room 
         public void Drop(IItem item)
         {
-            _items.Add(item.Name,item);
+            _items.Add(item);
             
         }
 
-        
-
         public IItem GetItem(string itemName)
         {
-            if(_items.ContainsKey(itemName))
-            {
-                return _items[itemName];
-            }
-            return null;
+            return _items.GetItem(itemName);
         }
-        public IItem Remove(string itemName)
+        public IItem Remove(IItem item)
         {
-            if (_items.ContainsKey(itemName))
-            {
-                IItem gotItem = _items[itemName];
-                _items.Remove(itemName);
-                return gotItem;
-            }
-            return null;
+            return _items.Remove(item);
         }
 
-        
+        public void PutBeast(Beast beast)
+        {
+            _beasts.Add(beast);
+            _beasts.GetBeast(beast.Name).CurrentRoom = this;
+        }
+
+        public Beast RemoveBeast(Beast beast)
+        {
+            return _beasts.Remove(beast);
+            _beasts.Remove(beast);
+        }
+
+        public Beast GetBeast(string beastName)
+        {
+           return _beasts.GetBeast(beastName);
+        }
+
+        public string GetBeasts()
+        {
+            return _beasts.ListBeasts();
+        }
 
         public string GetItems()
         {
-            string itemNames = "****Items: ";
-            Dictionary<string, IItem>.KeyCollection keys = _items.Keys;
-            foreach (string itemName in keys)
-            {
-                itemNames += " " + itemName;
-            }
-            return itemNames;
+            return "****Items: "+ _items.ListItems();
         }
 
         public string Description()

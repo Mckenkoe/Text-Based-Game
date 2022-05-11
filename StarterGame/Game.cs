@@ -6,16 +6,34 @@ namespace StarterGame
 {
     public class Game
     {
+        private Dictionary<string, Beast> _beasts;
         private Player _player;
         private Parser _parser;
         private bool _playing;
 
+        //static int EXPLORE = 0;
+        //static int FIGHT = 1;
+        //int state = EXPLORE;
+
+        static int PLAYERTURN = 0;
+        static int BEASTTURN = 1;
+        int state = PLAYERTURN;
+
         public Game()
         {
-            //GameWorld gw = new GameWorld();
             _playing = false;
             _parser = new Parser(new CommandWords());
             _player = new Player(GameWorld.Instance().Entrance); //access instance in gameworld and passes entrance to player
+            _beasts = new Dictionary<string, Beast>();
+
+            //beasts
+            Beast chicken = new Beast("chicken", 2, 5);
+            _beasts.Add("chicken", chicken);
+            Beast cow = new Beast("cow", 4, 15);
+            _beasts.Add("cow", cow);
+            Beast dog = new Beast("dog", 7, 10);
+            _beasts.Add("dog", dog);
+
         }
 
        
@@ -32,6 +50,7 @@ namespace StarterGame
             bool finished = false;
             while (!finished)
             {
+
                 Console.Write("\n>");
                 Command command = _parser.ParseCommand(Console.ReadLine());
                 if (command == null)
@@ -42,6 +61,8 @@ namespace StarterGame
                 {
                     finished = command.Execute(_player);
                 }
+
+                
             }
         }
 

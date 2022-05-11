@@ -28,35 +28,8 @@ namespace StarterGame
         private GameWorld()
         {
             _entrance = CreateWorld();
-
-            //make method into an observer
-            NotificationCenter.Instance.AddObserver("PlayerWillEnterRoom", PLayerWillEnterRoom);
-            //make method into an observer
-            NotificationCenter.Instance.AddObserver("PlayerDidEnterRoom", PlayerDidEnterRoom);
         }
 
-        public void PLayerWillEnterRoom(Notification notification)
-        {
-            Player player = (Player)notification.Object;
-            if(player.CurrentRoom == _exit)
-            {
-
-            }
-            player.OutputMessage("*** The player will leave " + player.CurrentRoom.Tag);
-        }
-
-        public void PlayerDidEnterRoom(Notification notification)
-        {
-            Player player = (Player)notification.Object;
-            if(player.CurrentRoom == _trigger)
-            {
-                //sends messages directly through player, instead of console
-                //player.OutputMessage("*** The player entered the trigger room");
-                _exit.SetExit("vortex", _entrance);
-                player.OutputMessage("\n A new exit has been made!");
-            }
-            
-        }
 
         private Room CreateWorld()
         {
@@ -100,26 +73,51 @@ namespace StarterGame
             TowerFloorTwo.SetExit("south", TowerFloorOne);
 
             //create trigger to activate trap room
-            _trigger = Kitchen;
+            _trigger = Vault;
             
             //set final room (exit)
             _exit = TowerFloorTwo;
 
             //Set the Delegates
-            Vault.Delegate = new TrapRoom("please");
-            TowerFloorTwo.Delegate = new EchoRoom();
+            Vault.Delegate = new TrapRoom("open");
+            TowerFloorTwo.Delegate = new WinRoom();
 
-            //Set items for rooms
-            Item pin = new Item("pin", 1, 1, false);
-            Garden.Drop(pin);
-            Item mouseToy = new Item("mouseToy", 2, 5);
-            Garden.Drop(mouseToy);
-            Item dogToy = new Item("dogToy", 10, 1);
-            Garden.Drop(dogToy);
+            //Create items
+            Item flour = new Item("flour", 5,0,1);
+            Item sugar = new Item("sugar", 5,0,1);
+            Item milk = new Item("milk", 5,3);
+            Item egg = new Item("egg", 5,0,1);
+            Item chocolate = new Item("chocolate", 5,0,2);
+            Item bagel = new Item("bagel", 3, 10,0,false);
+            Item apple = new Item("apple", 2, 5,0, false);
+            Item banana = new Item("banana", 2, 5,0, false);
+            Item grape = new Item("grape", 1, 5,0,false);
+
+            //item with decorator
             Item dagger = new Item("dagger");
             Item diamond = new Item("diamond", 10, 10);
             dagger.AddDecorator(diamond);
+
+            //Set items for rooms
             CastleEntrance.Drop(dagger);
+
+            Garden.Drop(flour);
+            DiningHall.Drop(sugar);
+            ThroneRoom.Drop(chocolate);
+            TowerFloorOne.Drop(bagel);
+            MainHall.Drop(apple);
+            Kitchen.Drop(banana);
+            Kitchen.Drop(grape);
+
+
+            //set beasts(monsters/ enemies) and give items
+            Beast cow = new Beast("cow", 3, 17);
+            cow.GiveBeastItem(milk);
+            Garden.PutBeast(cow);
+            Beast chicken = new Beast("chicken", 2, 6);
+            chicken.GiveBeastItem(egg);
+            Kitchen.PutBeast(chicken);
+            //Beast cat = new Beast("cat",4, 12);
 
             return CastleEntrance;
         }

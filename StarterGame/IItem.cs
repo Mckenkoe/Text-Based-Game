@@ -9,7 +9,8 @@ namespace StarterGame
         string Name { get; }
         string LongName { get; }
         float Weight { get; }
-        float Value { get; }
+        int Value { get; }
+        int Volume { get; }
         bool Pickupable { get; }
         string Description { get; }
         void AddDecorator(IItem decorator);
